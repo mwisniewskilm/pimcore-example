@@ -27,7 +27,7 @@ pipeline {
                     steps {
                         sh 'echo "TEST PREPARATION"'
                     }
-                },
+                }
                 stage('PHPMD analysis') {
                     steps {
                         sh 'echo "TEST PREPARATION"'
