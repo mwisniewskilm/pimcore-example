@@ -1,0 +1,86 @@
+variables:
+    PIMCORE_PATH: "/home/deploy/pimcore"
+    SOURCE_PATH: "./"
+    MYSQL_ROOT_PASSWORD: "test"
+    MYSQL_DATABASE: "test"
+    PIMCORE_TEST_DB_DSN: "mysql://root:test@db-test/test"
+    APP_ENV: "test"
+
+stages:
+    - lint
+    - deploy
+
+csfixer&stan:
+    stage: lint
+    only: 
+        - merge_requests
+        - stage
+    image: pimcore/pimcore:PHP8.2-fpm
+    cache:
+        paths:
+            - composer-cache/
+    services:
+        -   name: mariadb:10.5
+            alias: db-test
+        - redis:latest
+    before_script:
+        - 'cp .env.local.example .env'
+        - 'cat .env'
+        - 'COMPOSER_CACHE_DIR=composer-cache php ./.ci/composer.phar install --ignore-platform-reqs --no-progress --no-suggest'
+        - 'vendor/bin/pimcore-install --admin-username=admin --admin-password=admin --mysql-host-socket=db-test --mysql-username=root --mysql-password=$MYSQL_ROOT_PASSWORD --mysql-database=$MYSQL_DATABASE'
+    script:
+        - sh .ci/phpcsfixer.sh
+        - sh .ci/phpstan.sh
+
+#deploy-stage:
+#    stage: deploy
+#    only:
+#        - stage
+#    before_script:
+#        - which ssh-agent || ( apk update && apk add openssh-client rsync )
+#        - eval $(ssh-agent -s)
+#        - echo "$SSH_KEY_STAGE" | tr -d '\r' | ssh-add - > /dev/null
+#        - mkdir -p ~/.ssh
+#        - chmod 700 ~/.ssh
+#    script:
+#        - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
+#
+#        - echo '=== Stop container ==='
+#        - ssh -A $PIMCORE_MACHINE_STAGE "docker-compose -f $PIMCORE_PATH/docker-compose-stage.yml stop"
+#        - ssh -A $PIMCORE_MACHINE_STAGE "sudo chown -R deploy:deploy $PIMCORE_PATH/"
+#
+#        - echo '=== Update file to MACHINE ==='
+#        - rsync -arce "ssh -o StrictHostKeyChecking=no" --filter=':- .dockerignore'  --owner --group $SOURCE_PATH $PIMCORE_MACHINE_STAGE:$PIMCORE_PATH
+#
+#        - echo '=== Start container and run necessary tasks ==='
+#        - ssh -A $PIMCORE_MACHINE_STAGE "docker-compose -f $PIMCORE_PATH/docker-compose-stage.yml up --build -d --remove-orphans"
+#        - ssh -A $PIMCORE_MACHINE_STAGE "docker-compose -f $PIMCORE_PATH/docker-compose-stage.yml exec -T php composer install --no-dev --no-interaction"
+#        - ssh -A $PIMCORE_MACHINE_STAGE "docker-compose -f $PIMCORE_PATH/docker-compose-stage.yml exec -T php composer dump-autoload"
+#        - ssh -A $PIMCORE_MACHINE_STAGE "docker-compose -f $PIMCORE_PATH/docker-compose-stage.yml exec -T php /bin/bash rebuild.sh"
+#
+#deploy-prod:
+#    stage: deploy
+#    only:
+#        - master
+#    before_script:
+#        - which ssh-agent || ( apk update && apk add openssh-client rsync )
+#        - eval $(ssh-agent -s)
+#        - echo "$SSH_KEY_PROD" | tr -d '\r' | ssh-add - > /dev/null
+#        - mkdir -p ~/.ssh
+#        - chmod 700 ~/.ssh
+#    script:
+#        - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
+#
+#        - echo '=== Stop container ==='
+#        - ssh -A $PIMCORE_MACHINE_PROD "docker-compose -f $PIMCORE_PATH/docker-compose-prod.yml stop"
+#        - ssh -A $PIMCORE_MACHINE_PROD "sudo chown -R deploy:deploy $PIMCORE_PATH/"
+#
+#        - echo '=== Update file to MACHINE ==='
+#        - rsync -arce "ssh -o StrictHostKeyChecking=no" --filter=':- .dockerignore'  --owner --group $SOURCE_PATH $PIMCORE_MACHINE_PROD:$PIMCORE_PATH
+#
+#        - echo '=== Start container and run necessary tasks ==='
+#        - ssh -A $PIMCORE_MACHINE_PROD "docker-compose -f $PIMCORE_PATH/docker-compose-prod.yml up --build -d --remove-orphans"
+#        - ssh -A $PIMCORE_MACHINE_PROD "docker-compose -f $PIMCORE_PATH/docker-compose-prod.yml exec -T php composer install --no-dev --no-interaction"
+#        - ssh -A $PIMCORE_MACHINE_PROD "docker-compose -f $PIMCORE_PATH/docker-compose-prod.yml exec -T php composer dump-autoload"
+#        - ssh -A $PIMCORE_MACHINE_PROD "docker-compose -f $PIMCORE_PATH/docker-compose-prod.yml exec -T php /bin/bash rebuild.sh"
+
